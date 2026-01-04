@@ -1,78 +1,70 @@
-import tkinter as tk
 import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 from tkinter import messagebox
-
-# importam functiile necesare
-from database.repository import fetch_all_clients
-
-# functia pentru curatarea tabelului
-from UI.ui_components import clear_treeview
-
-# fereastra pentru adaugarea clientilor (din acelasi folder 'clients')
+from database.repository import fetch_all_clients, search_clients, delete_client
 from clients import add_client_window
-
 
 class ClientsDashboard:
     def __init__(self, parent, db_conn):
         self.db_conn = db_conn
-        
-        # fereastra noua (Toplevel)
         self.win = ttk.Toplevel(parent)
-        self.win.title("Gestiune clienti")
-        self.win.geometry("900x600")
+        self.win.title("Gestiune Clienți")
+        self.win.geometry("1100x750")
+
+        main_layout = ttk.Frame(self.win, padding=20)
+        main_layout.pack(fill=BOTH, expand=True)
+
+        # Header & Search
+        top = ttk.Frame(main_layout); top.pack(fill=X, pady=(0, 20))
+        ttk.Label(top, text="👥 Registru Clienți", font=("Segoe UI", 20, "bold"), bootstyle="primary").pack(side=LEFT)
         
-        # titlu
-        ttk.Label(self.win, text="Lista clienti", font=("Calibri", 20, "bold")).pack(pady=10)
+        sf = ttk.Labelframe(top, text="🔍 Caută (Nume/Tel)", padding=10)
+        sf.pack(side=RIGHT)
+        self.s_var = ttk.StringVar()
+        ttk.Entry(sf, textvariable=self.s_var, width=25).pack(side=LEFT, padx=5)
+        ttk.Button(sf, text="Caută", command=self.do_search, bootstyle="info").pack(side=LEFT)
+        ttk.Button(sf, text="Reset", command=self.do_reset, bootstyle="secondary-outline").pack(side=LEFT, padx=5)
 
-        # --- toolbar (butoane actiuni) ---
-        toolbar = ttk.Frame(self.win)
-        toolbar.pack(fill="x", padx=10, pady=5)
+        # Toolbar
+        tb = ttk.Frame(main_layout); tb.pack(fill=X, pady=(0, 10))
+        ttk.Button(tb, text="➕ Adaugă", command=self.add, bootstyle="success").pack(side=LEFT, padx=5)
+        ttk.Button(tb, text="✏️ Editează", command=self.edit, bootstyle="warning").pack(side=LEFT, padx=5)
+        ttk.Button(tb, text="❌ Șterge", command=self.delete, bootstyle="danger").pack(side=LEFT, padx=5)
 
-        ttk.Button(
-            toolbar,
-            text="+ Adauga client",
-            command=self.open_add_modal,
-            bootstyle="success"
-        ).pack(side="left", padx=5)
-
-        ttk.Button(
-            toolbar,
-            text="Refresh tabel",
-            command=self.refresh_table,
-            bootstyle="info"
-        ).pack(side="left", padx=5)
-        
-        # --- tabel clienti ---
+        # Tabel
         cols = ("ID", "Nume", "Prenume", "Telefon", "Email", "Tip", "CUI")
-        self.tree = ttk.Treeview(self.win, columns=cols, show="headings")
+        self.tree = ttk.Treeview(main_layout, columns=cols, show="headings", bootstyle="primary")
         
-        # configurare coloane
         for col in cols:
-            self.tree.heading(col, text=col)
-            w = 50 if col == "ID" else 120
-            self.tree.column(col, width=w, anchor="w")
-            
-        self.tree.pack(fill="both", expand=True, padx=10, pady=10)
+            # ASCUNDEM ID-UL (Setam latime 0)
+            if col == "ID":
+                self.tree.column(col, width=0, stretch=False)
+            else:
+                self.tree.heading(col, text=col.upper())
+                self.tree.column(col, width=150)
 
-        # incarcam datele la deschiderea ferestrei
-        self.refresh_table()
+        sc = ttk.Scrollbar(main_layout, command=self.tree.yview); sc.pack(side=RIGHT, fill=Y); self.tree.config(yscroll=sc.set)
+        self.tree.pack(fill=BOTH, expand=True)
+        self.do_reset()
 
-    def refresh_table(self):
-        """Reincarca datele in tabel."""
-        clear_treeview(self.tree)
-        if self.db_conn and self.db_conn.is_connected():
-            rows = fetch_all_clients(self.db_conn)
-            for row in rows:
-                self.tree.insert("", "end", values=row)
-        else:
-            messagebox.showerror("Eroare", "Conexiunea la baza de date a fost pierduta!")
+    def do_search(self):
+        t = self.s_var.get().strip()
+        self.fill(search_clients(self.db_conn, t) if t else fetch_all_clients(self.db_conn))
 
-    def open_add_modal(self):
-        """Deschide fereastra pentru adaugarea unui client nou."""
-        # dupa ce se adauga un client, se actualizeaza tabelul curent
-        add_client_window.open_add_client_window(self.win, self.db_conn, self.refresh_table)
+    def do_reset(self):
+        self.s_var.set("")
+        self.fill(fetch_all_clients(self.db_conn))
 
+    def fill(self, rows):
+        self.tree.delete(*self.tree.get_children())
+        for r in rows: self.tree.insert("", "end", values=r)
 
-def open_clients_window(parent, db_conn):
-    """Functie helper apelata din main.py pentru deschiderea ferestrei de clienti."""
-    ClientsDashboard(parent, db_conn)
+    def add(self): add_client_window.open_client_form(self.win, self.db_conn, self.do_reset)
+    def edit(self):
+        s = self.tree.selection()
+        if s: add_client_window.open_client_form(self.win, self.db_conn, self.do_reset, client_to_edit=self.tree.item(s[0], "values"))
+    def delete(self):
+        s = self.tree.selection()
+        if s and messagebox.askyesno("?", "Stergi?"): delete_client(self.db_conn, self.tree.item(s[0], "values")[0]); self.do_reset()
+
+def open_clients_window(p, c): ClientsDashboard(p, c)

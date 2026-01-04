@@ -1,159 +1,143 @@
 import tkinter as tk
 import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 from tkinter import messagebox
+import traceback
 
-# --- IMPORTURI ---
+# --- IMPORT BAZA DE DATE ---
 from database.database import db
-
-# componente grafice (folderul UI, fisierul ui_components.py)
 from UI.ui_components import create_input_row
 
-# ferestre pentru module
-from clients import clients_window
-from vehicles import vehicles_window
+# --- IMPORTURI MODULE ---
+try:
+    from clients import clients_window
+    from vehicles import vehicles_window
+    from mechanics import mechanics_window
+    from services import services_window
+    from suppliers import suppliers_window
+    from reports import reports_window
+    from stats import statistics_window # Noul modul de statistici
+except Exception as e:
+    print(f"Eroare critica import: {e}")
 
-
-# --- LOGICA APLICATIEI ---
-
+# --- LOGICA ---
 def login_action():
-    """
-    Functia apelata la click pe butonul 'Conectare'.
-    Preia datele din campuri si incearca sa faca legatura cu MySQL.
-    """
-    host = host_var.get()
-    user = user_var.get()
-    password = pass_var.get()
-    port = port_var.get()
-    database = db_name_var.get()
-
-    succes = db.connect(host, user, password, port, database)
+    h = host_var.get()
+    u = user_var.get()
+    p = pass_var.get()
+    po = port_var.get()
+    d = db_name_var.get()
     
-    if succes:
-        status_var.set("Status: CONECTAT la baza de date")
-        messagebox.showinfo("Succes", "Te-ai conectat cu succes la server!")
-        
-        # activam butoanele de module
-        btn_clienti.config(state="normal")
-        btn_vehicule.config(state="normal")
-    else:
-        status_var.set("Status: Eroare conectare")
-        messagebox.showerror(
-            "Eroare login",
-            "Nu s-a putut realiza conexiunea la MySQL.\n"
-            "Verifica daca XAMPP/MySQL este pornit si daca datele sunt corecte."
-        )
+    try:
+        if db.connect(h, u, p, po, d):
+            status_var.set("Status: CONECTAT ✅")
+            lbl_status.config(bootstyle="success inverse")
+            messagebox.showinfo("Succes", "Conectat la server!")
+            # Activam butoanele
+            for btn in buttons_list: 
+                btn.config(state="normal")
+        else: 
+            raise Exception("Date incorecte sau server oprit.")
+    except Exception as e:
+        status_var.set("Status: EROARE ❌")
+        lbl_status.config(bootstyle="danger inverse")
+        messagebox.showerror("Eroare", str(e))
 
+def check_open(func):
+    try:
+        c = db.get_connection()
+        if c and c.is_connected(): func(app, c)
+        else: messagebox.showwarning("!", "Te rog să te conectezi la bază de date.")
+    except Exception as e:
+        print(traceback.format_exc())
+        messagebox.showerror("Eroare Modul", str(e))
 
-def deschide_modul_clienti():
-    """
-    Deschide fereastra de gestiune clienti (clients_window.py).
-    """
-    conn = db.get_connection()
-    
-    if conn and conn.is_connected():
-        clients_window.open_clients_window(app, conn)
-    else:
-        messagebox.showwarning(
-            "Atentie",
-            "Conexiunea s-a pierdut. Te rog sa te reconectezi."
-        )
+# Wrappers
+def d_cl(): check_open(clients_window.open_clients_window)
+def d_ve(): check_open(vehicles_window.open_vehicle_window)
+def d_me(): check_open(mechanics_window.open_mechanics_window)
+def d_se(): check_open(services_window.open_services_window)
+def d_fu(): check_open(suppliers_window.open_suppliers_window)
+def d_re(): check_open(reports_window.open_reports_window)
+def d_st(): check_open(statistics_window.open_statistics_window)
 
-
-def deschide_modul_vehicule():
-    """
-    Deschide fereastra de gestiune vehicule (vehicles_window.py).
-    """
-    conn = db.get_connection()
-    
-    if conn and conn.is_connected():
-        vehicles_window.open_vehicle_window(app, conn)
-    else:
-        messagebox.showwarning(
-            "Atentie",
-            "Conexiunea s-a pierdut. Te rog sa te reconectezi."
-        )
-
-
-# --- INTERFATA GRAFICA (GUI) ---
-
-# fereastra principala
+# --- GUI MODERN ---
 app = ttk.Window(themename="superhero")
-app.title("Service Auto - Meniu principal")
-app.geometry("1000x1500")
+app.title("Service Auto Manager v3.0")
+app.geometry("1150x850")
 
-# titlu aplicatie
-ttk.Label(app, text="Service Auto Manager", font=("Calibri", 26, "bold")).pack(pady=20)
+# Container Principal
+main = ttk.Frame(app, padding=20)
+main.pack(fill=BOTH, expand=True)
 
-# 1. zona de login
-frame_login = ttk.Labelframe(app, text="1. Autentificare server", padding=15)
-frame_login.pack(fill="x", padx=20, pady=5)
+# 1. HEADER
+header = ttk.Frame(main)
+header.pack(fill=X, pady=(0, 20))
 
-# variabile pentru input-uri
-host_var = tk.StringVar(value="localhost")
-user_var = tk.StringVar(value="root")
-pass_var = tk.StringVar()
-port_var = tk.StringVar(value="3306")
-db_name_var = tk.StringVar(value="evidentaservice")
-status_var = tk.StringVar(value="Status: Deconectat")
+ttk.Label(header, text="SERVICE AUTO MANAGER", font=("Helvetica", 28, "bold"), bootstyle="light").pack(anchor="center")
+ttk.Label(header, text="Platformă Integrată de Gestiune", font=("Helvetica", 12), bootstyle="secondary").pack(anchor="center")
+ttk.Separator(main, orient="horizontal").pack(fill=X, pady=10)
 
-# aranjam input-urile pe doua coloane
-grid_in = ttk.Frame(frame_login)
-grid_in.pack(fill="x")
+# 2. LOGIN (Card Style)
+login_card = ttk.Labelframe(main, text=" 🔒 Configurare Server ", padding=15, bootstyle="info")
+login_card.pack(fill=X, pady=10)
 
-col1 = ttk.Frame(grid_in)
-col1.pack(side="left", fill="x", expand=True)
-create_input_row(col1, "Host:", host_var)
-create_input_row(col1, "User:", user_var)
+inps = ttk.Frame(login_card)
+inps.pack(fill=X)
 
-col2 = ttk.Frame(grid_in)
-col2.pack(side="left", fill="x", expand=True)
-create_input_row(col2, "Port:", port_var)
-create_input_row(col2, "Parola:", pass_var, show="*")
+# Vars
+host_var=tk.StringVar(value="localhost"); user_var=tk.StringVar(value="root"); pass_var=tk.StringVar()
+port_var=tk.StringVar(value="3306"); db_name_var=tk.StringVar(value="evidentaservice"); status_var=tk.StringVar(value="Deconectat")
 
-create_input_row(frame_login, "Nume BD:", db_name_var)
+# Grid inputs
+c1 = ttk.Frame(inps); c1.pack(side=LEFT, fill=X, expand=True, padx=10)
+create_input_row(c1, "Host:", host_var); create_input_row(c1, "User:", user_var)
 
-# buton login
-ttk.Button(
-    frame_login,
-    text="Conectare",
-    command=login_action,
-    bootstyle="primary"
-).pack(pady=10)
+c2 = ttk.Frame(inps); c2.pack(side=LEFT, fill=X, expand=True, padx=10)
+create_input_row(c2, "Parola:", pass_var, show="*"); create_input_row(c2, "DB:", db_name_var)
 
-ttk.Label(frame_login, textvariable=status_var, font="Arial 9 italic").pack()
+# Buton Conectare
+btn_area = ttk.Frame(login_card)
+btn_area.pack(fill=X, pady=10)
+ttk.Button(btn_area, text="CONECTARE SERVER", command=login_action, bootstyle="primary", width=25).pack(side=LEFT, padx=10)
+lbl_status = ttk.Label(btn_area, textvariable=status_var, font=("Bold", 10), bootstyle="secondary inverse", padding=6)
+lbl_status.pack(side=LEFT, padx=10)
 
-# 2. zona de meniu (module)
-frame_menu = ttk.Labelframe(app, text="2. Module disponibile", padding=20)
-frame_menu.pack(fill="both", expand=True, padx=20, pady=10)
+# 3. DASHBOARD TILES (Modern)
+dash = ttk.Frame(main)
+dash.pack(fill=BOTH, expand=True, pady=20)
 
-# buton deschidere clienti
-btn_clienti = ttk.Button(
-    frame_menu,
-    text="Gestiune CLIENTI",
-    command=deschide_modul_clienti,
-    state="disabled",
-    bootstyle="success outline"
-)
-btn_clienti.pack(fill="x", pady=5)
+ttk.Label(dash, text="📦 Module Disponibile", font=("Helvetica", 16, "bold"), bootstyle="warning").pack(anchor="w", pady=(0,15))
 
-# buton deschidere vehicule
-btn_vehicule = ttk.Button(
-    frame_menu,
-    text="Gestiune VEHICULE",
-    command=deschide_modul_vehicule,
-    state="disabled",
-    bootstyle="success outline"
-)
-btn_vehicule.pack(fill="x", pady=5)
+# Grid
+grid = ttk.Frame(dash)
+grid.pack(fill=BOTH, expand=True)
+grid.columnconfigure(0, weight=1); grid.columnconfigure(1, weight=1); grid.columnconfigure(2, weight=1); grid.columnconfigure(3, weight=1)
+grid.rowconfigure(0, weight=1); grid.rowconfigure(1, weight=1)
 
-# buton iesire
-ttk.Button(
-    app,
-    text="Iesire",
-    command=app.destroy,
-    bootstyle="danger"
-).pack(side="bottom", pady=10)
+buttons_list = []
 
-# pornire aplicatie
+def create_tile(p, txt, cmd, r, c, st):
+    # Buton Mare cu Emoji
+    btn = ttk.Button(p, text=txt, command=cmd, state="disabled", bootstyle=f"{st} outline", width=20)
+    btn.grid(row=r, column=c, padx=10, pady=10, sticky="nsew")
+    buttons_list.append(btn)
+
+# --- RANDUL 1 ---
+create_tile(grid, "👥\nCLIENȚI", d_cl, 0, 0, "success")
+create_tile(grid, "🚗\nVEHICULE", d_ve, 0, 1, "success")
+create_tile(grid, "🔧\nMECANICI", d_me, 0, 2, "warning")
+create_tile(grid, "📋\nSERVICII", d_se, 0, 3, "info")
+
+# --- RANDUL 2 ---
+create_tile(grid, "📦\nFURNIZORI", d_fu, 1, 0, "secondary")
+create_tile(grid, "📊\nRAPOARTE", d_re, 1, 1, "danger")
+create_tile(grid, "📈\nSTATISTICI", d_st, 1, 2, "primary") # Butonul pentru noul dashboard
+create_tile(grid, "🚪\nIESIRE", app.destroy, 1, 3, "dark")
+
+# Footer
+foot = ttk.Frame(app, padding=10, bootstyle="dark"); foot.pack(side=BOTTOM, fill=X)
+ttk.Label(foot, text="© 2025 Service Auto Manager", font=("Arial", 9), bootstyle="inverse-dark").pack(side=RIGHT)
+
 if __name__ == "__main__":
     app.mainloop()

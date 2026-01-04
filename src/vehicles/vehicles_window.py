@@ -1,89 +1,79 @@
-import tkinter as tk
 import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 from tkinter import messagebox
-
-# functiile pentru acces la baza de date
-from database.repository import fetch_all_vehicle
-
-# utilitar pentru curatarea tabelului
-from UI.ui_components import clear_treeview
-
-# fereastra pentru adaugarea vehiculelor (din folderul 'vehicles')
+from database.repository import fetch_all_vehicles, search_vehicles, delete_vehicle, get_vehicle_history_data
 from vehicles import add_vehicle_window
 
-
-class VehicleDashboard:
+class VehiclesDashboard:
     def __init__(self, parent, db_conn):
         self.db_conn = db_conn
-        
-        # fereastra noua (Toplevel)
         self.win = ttk.Toplevel(parent)
-        self.win.title("Gestiune vehicule")
-        self.win.geometry("1800x1200")
+        self.win.title("Parc Auto")
+        self.win.geometry("1200x750")
+
+        main = ttk.Frame(self.win, padding=20); main.pack(fill=BOTH, expand=True)
+
+        top = ttk.Frame(main); top.pack(fill=X, pady=(0, 20))
+        ttk.Label(top, text="🚗 Gestiune Vehicule", font=("Bold", 20), bootstyle="primary").pack(side=LEFT)
         
-        # titlu
-        ttk.Label(self.win, text="Lista vehicule", font=("Calibri", 20, "bold")).pack(pady=10)
+        sf = ttk.Labelframe(top, text="🔍 Caută (Nr/Sasiu/Nume)", padding=10); sf.pack(side=RIGHT)
+        self.s_var = ttk.StringVar()
+        ttk.Entry(sf, textvariable=self.s_var, width=25).pack(side=LEFT, padx=5)
+        ttk.Button(sf, text="Caută", command=self.do_search, bootstyle="info").pack(side=LEFT)
+        ttk.Button(sf, text="Reset", command=self.do_reset, bootstyle="secondary-outline").pack(side=LEFT, padx=5)
 
-        # --- toolbar (butoane actiuni) ---
-        toolbar = ttk.Frame(self.win)
-        toolbar.pack(fill="x", padx=10, pady=5)
+        tb = ttk.Frame(main); tb.pack(fill=X, pady=(0,10))
+        ttk.Button(tb, text="➕ Adaugă", command=self.add, bootstyle="success").pack(side=LEFT, padx=5)
+        ttk.Button(tb, text="✏️ Editează", command=self.edit, bootstyle="warning").pack(side=LEFT, padx=5)
+        ttk.Button(tb, text="❌ Șterge", command=self.delete, bootstyle="danger").pack(side=LEFT, padx=5)
+        ttk.Button(tb, text="📜 ISTORIC", command=self.show_history, bootstyle="info").pack(side=LEFT, padx=20)
 
-        ttk.Button(
-            toolbar,
-            text="+ Adauga vehicul",
-            command=self.open_add_modal,
-            bootstyle="success"
-        ).pack(side="left", padx=5)
-
-        ttk.Button(
-            toolbar,
-            text="Refresh tabel",
-            command=self.refresh_table,
-            bootstyle="info"
-        ).pack(side="left", padx=5)
+        # Structura query-ului: (VID, CID, PROPRIETAR, NR, SASIU, MARCA, MODEL, AN, MOTOR, CC, COMB)
+        cols = ("ID", "CID", "PROPRIETAR", "NR. INMAT", "SASIU", "MARCA", "MODEL", "AN", "MOTOR", "CC", "COMB")
+        self.tree = ttk.Treeview(main, columns=cols, show="headings", bootstyle="primary")
         
-        # --- tabel vehicule ---
-        cols = (
-            "VehiculID",
-            "ClientID",
-            "NumarInmatriculare",
-            "SerieSasiu",
-            "Marca",
-            "Model",
-            "AnFabricatie",
-            "CodMotor",
-            "CapacitateCilindrica",
-            "TipCombustibil",
-        )
-        self.tree = ttk.Treeview(self.win, columns=cols, show="headings")
+        for c in cols:
+            # ASCUNDEM ID SI CID
+            if c == "ID" or c == "CID":
+                self.tree.column(c, width=0, stretch=False)
+            else:
+                self.tree.heading(c, text=c)
+                self.tree.column(c, width=100)
         
-        # configurare coloane
-        for col in cols:
-            self.tree.heading(col, text=col)
-            w = 50 if col == "VehiculID" else 150
-            self.tree.column(col, width=w, anchor="w")
-            
-        self.tree.pack(fill="both", expand=True, padx=10, pady=10)
+        sy = ttk.Scrollbar(main, command=self.tree.yview); sy.pack(side=RIGHT, fill=Y)
+        self.tree.config(yscroll=sy.set); self.tree.pack(fill=BOTH, expand=True)
+        self.do_reset()
 
-        # incarcam datele la deschiderea ferestrei
-        self.refresh_table()
+    def do_search(self):
+        t = self.s_var.get().strip()
+        self.fill(search_vehicles(self.db_conn, t) if t else fetch_all_vehicles(self.db_conn))
+    def do_reset(self):
+        self.s_var.set(""); self.fill(fetch_all_vehicles(self.db_conn))
+    def fill(self, rows):
+        self.tree.delete(*self.tree.get_children())
+        for r in rows: self.tree.insert("", "end", values=r)
+    def add(self): add_vehicle_window.open_vehicle_form(self.win, self.db_conn, self.do_reset)
+    def edit(self):
+        s = self.tree.selection()
+        if s: add_vehicle_window.open_vehicle_form(self.win, self.db_conn, self.do_reset, self.tree.item(s[0], "values"))
+    def delete(self):
+        s = self.tree.selection()
+        if s and messagebox.askyesno("?", "Stergi?"): delete_vehicle(self.db_conn, self.tree.item(s[0], "values")[0]); self.do_reset()
+    def show_history(self):
+        s = self.tree.selection()
+        if not s: return
+        r = self.tree.item(s[0], "values")
+        from ttkbootstrap.scrolled import ScrolledFrame
+        w = ttk.Toplevel(self.win); w.geometry("800x600"); w.title(f"Istoric {r[3]}")
+        ttk.Label(w, text=f"Istoric {r[3]} ({r[5]} {r[6]})", font=("Bold", 16)).pack(pady=10)
+        sf = ScrolledFrame(w); sf.pack(fill=BOTH, expand=True)
+        data = get_vehicle_history_data(self.db_conn, r[0])
+        if not data: ttk.Label(sf, text="Fara intrari.").pack()
+        for i in data:
+            d=i['deviz']
+            fr = ttk.Labelframe(sf, text=f"Deviz {d[1]} | {d[2]}", padding=10)
+            fr.pack(fill=X, padx=10, pady=5)
+            ttk.Label(fr, text=f"Problema: {d[3]}").pack(anchor="w")
+            ttk.Label(fr, text=f"Total: {d[4]} RON", bootstyle="danger").pack(anchor="e")
 
-    def refresh_table(self):
-        """Reincarca datele in tabel."""
-        clear_treeview(self.tree)
-        if self.db_conn and self.db_conn.is_connected():
-            rows = fetch_all_vehicle(self.db_conn)
-            for row in rows:
-                self.tree.insert("", "end", values=row)
-        else:
-            messagebox.showerror("Eroare", "Conexiunea la baza de date a fost pierduta!")
-
-    def open_add_modal(self):
-        """Deschide fereastra pentru adaugarea unui vehicul nou."""
-        # dupa adaugare, actualizam tabelul curent
-        add_vehicle_window.open_add_vehicle_window(self.win, self.db_conn, self.refresh_table)
-
-
-def open_vehicle_window(parent, db_conn):
-    """Functie helper apelata din main.py pentru deschiderea ferestrei de vehicule."""
-    VehicleDashboard(parent, db_conn)
+def open_vehicle_window(p, c): VehiclesDashboard(p, c)
