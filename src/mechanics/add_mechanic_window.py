@@ -7,17 +7,15 @@ def open_mechanic_form(parent, db_conn, refresh_callback, data_to_edit=None):
     win = ttk.Toplevel(parent)
     is_edit = data_to_edit is not None
     win.title("Editare Mecanic" if is_edit else "Adaugă Mecanic")
-    win.geometry("400x350") # Mai mic putin
+    win.geometry("400x350") 
 
     ttk.Label(win, text="Date Mecanic", font="Calibri 14 bold").pack(pady=10)
 
     nume_var = tk.StringVar()
     prenume_var = tk.StringVar()
-    # spec_var = tk.StringVar()  <-- SCOS
     data_var = tk.StringVar()
 
     if is_edit:
-        # data_to_edit vine acum fara specializare: (ID, Nume, Prenume, Data)
         nume_var.set(data_to_edit[1])
         prenume_var.set(data_to_edit[2])
         data_var.set(data_to_edit[3]) 
@@ -30,7 +28,6 @@ def open_mechanic_form(parent, db_conn, refresh_callback, data_to_edit=None):
 
     add_f("Nume:", nume_var)
     add_f("Prenume:", prenume_var)
-    # add_f("Specializare:", spec_var) <-- SCOS
     add_f("Data Angajarii:", data_var)
     ttk.Label(win, text="(Format: YYYY-MM-DD)", font="Arial 8").pack()
 
@@ -39,7 +36,6 @@ def open_mechanic_form(parent, db_conn, refresh_callback, data_to_edit=None):
             messagebox.showwarning("!", "Nume obligatoriu")
             return
         
-        # Apelam functiile actualizate (fara parametru specializare)
         if is_edit:
             ok = update_mechanic(db_conn, data_to_edit[0], nume_var.get(), prenume_var.get(), data_var.get())
         else:

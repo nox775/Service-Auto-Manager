@@ -9,7 +9,7 @@ class ReportsDashboard:
     def __init__(self, parent, db_conn):
         self.db_conn = db_conn
         self.win = ttk.Toplevel(parent)
-        self.win.title("Rapoarte & BI")
+        self.win.title("Rapoarte Operaționale")
         self.win.geometry("1400x850")
         
         layout = ttk.Frame(self.win)
@@ -23,18 +23,24 @@ class ReportsDashboard:
         menu = ScrolledFrame(side, autohide=True, bootstyle="secondary")
         menu.pack(fill=BOTH, expand=True)
         
+       
         self.cfgs = [
+            # Categoria 1: Informatii Generale
             ("Vehicule & Proprietari", get_report_vehicles_owners, "🚗", "info", "Marca:", ""),
-            ("Situație Devize", get_report_devize_details, "📋", "info", "Stare:", ""),
-            ("Facturi Emise", get_report_invoices, "🧾", "info", "An:", ""),
             ("Mecanici & Specializări", get_report_mechanics_specs, "🔧", "info", "Spec:", ""),
-            ("Stoc Piese", get_report_parts_suppliers, "📦", "info", "Stoc <:", "10"),
-            ("Manoperă", get_report_labor_info, "🛠️", "info", "Mecanic:", ""),
+            
             ("SEPARATOR", None, "", "", "", ""),
-            ("Clienți VIP", get_complex_clients_above_avg, "💎", "warning", "Min RON:", "1000"),
-            ("Piese Moarte", get_complex_unsold_parts, "💀", "warning", "Furnizor:", ""),
-            ("Flote", get_complex_fleet_clients, "🏢", "warning", "Min Masini:", "1"),
-            ("Devize Scumpe", get_complex_expensive_repairs_param, "💰", "danger", "Min RON:", "2000"),
+            
+            # Categoria 2: Financiar & Facturare
+            ("Situație Devize", get_report_devize_details, "📋", "primary", "Stare:", ""),
+            ("Facturi Emise", get_report_invoices, "🧾", "primary", "An:", ""),
+            ("Marjă Profit Piese", get_report_profit_margin, "💰", "success", "Marjă Min (%):", "30"),
+            
+            ("SEPARATOR", None, "", "", "", ""),
+            
+            # Categoria 3: Stocuri & Clienti Mari
+            ("Stoc Piese (Necesar)", get_report_parts_low_stock, "📦", "warning", "Stoc <:", "10"),
+            ("Clienti Flote (>1 Auto)", get_report_fleet_clients, "🏢", "warning", "Min Masini:", "1"),
         ]
         
         self.btns = []
@@ -49,13 +55,13 @@ class ReportsDashboard:
 
         ttk.Button(side, text="EXIT", command=self.win.destroy, bootstyle="light-outline").pack(side=BOTTOM, fill=X, pady=10)
 
-        # Content
+        # Content Area
         cont = ttk.Frame(layout, padding=20)
         cont.pack(side=LEFT, fill=BOTH, expand=True)
         self.head = ttk.Label(cont, text="Selecteaza Raport", font=("Bold", 24))
         self.head.pack(anchor="w")
         
-        # Filter area
+        # Filtru Dinamic
         self.filt = ttk.Labelframe(cont, text="Filtru", padding=10)
         self.filt.pack(fill=X, pady=10)
         self.f_lbl = ttk.Label(self.filt, text="Param:"); self.f_lbl.pack(side=LEFT)
@@ -69,8 +75,6 @@ class ReportsDashboard:
         self.tree = ttk.Treeview(cont, show="headings", bootstyle="primary")
         sc = ttk.Scrollbar(cont, command=self.tree.yview); sc.pack(side=RIGHT, fill=Y); self.tree.config(yscroll=sc.set)
         self.tree.pack(fill=BOTH, expand=True)
-        
-        # Tag pt stoc critic
         self.tree.tag_configure("crit", foreground="red")
 
     def setup(self, cfg, idx):
@@ -85,8 +89,7 @@ class ReportsDashboard:
         else: self.pdf_btn.config(state="disabled")
 
         for x, btn in enumerate(self.btns):
-            bs = "info" if x<6 else ("warning" if x<9 else "danger")
-            btn.config(bootstyle=f"{bs}-{'solid' if x==idx else 'outline'}")
+            btn.config(bootstyle=f"secondary-{'solid' if x==idx else 'outline'}")
             
         self.run()
 
@@ -97,37 +100,25 @@ class ReportsDashboard:
             r, c = self.curr_func(self.db_conn, self.f_var.get())
             self.tree["columns"] = c
             stoc_idx = -1
-            
             for k, col in enumerate(c):
                 self.tree.heading(col, text=col)
-                self.tree.column(col, width=100 if "ID" not in col else 50)
+                self.tree.column(col, width=120)
                 if "Stoc" in col: stoc_idx = k
 
             for row in r:
-                tag = "normal"
-                if stoc_idx != -1 and row[stoc_idx] < 5: tag = "crit"
-                self.tree.insert("", "end", values=[x if x else "-" for x in row], tags=(tag,))
+                tag = "crit" if (stoc_idx != -1 and row[stoc_idx] < 5) else "normal"
+                self.tree.insert("", "end", values=[x if x is not None else "-" for x in row], tags=(tag,))
         except Exception as e: messagebox.showerror("Err", str(e))
 
     def print_pdf(self):
         s = self.tree.selection()
         if not s: return
-        
-        if "Facturi" not in self.head.cget("text"):
-            messagebox.showinfo("!", "Selecteaza raportul de Facturi.")
-            return
-
         vals = self.tree.item(s[0], "values")
-        serie = vals[0] # Presupunem Seria pe col 0
-        
-        # Apelam functia COMPLEXA de detalii
+        serie = vals[0]
         data = fetch_invoice_details_complex(self.db_conn, serie)
-        
         if data:
             f = generate_invoice_pdf(data)
-            if f: 
-                messagebox.showinfo("OK", f"Generat: {f}")
-                os.system(f"start {f}")
+            if f: os.system(f"start {f}")
         else: messagebox.showerror("Err", "Date lipsa")
 
 def open_reports_window(p, c): ReportsDashboard(p, c)
